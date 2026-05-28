@@ -1,0 +1,177 @@
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Project {
+  id              String           @id // کد کارگاه
+  name            String           // نام کامل پروژه
+  clientName      String           @default("نامشخص") // نام کارفرما
+  contractNumber  String           @default("نامشخص") // شماره قرارداد
+  contractDate    String           @default("نامشخص") // تاریخ قرارداد
+  contractAmount  Float            @default(0)        // مبلغ اولیه قرارداد - ریال
+  
+  // ارتباطات دوطرفه
+  invoices        ProjectInvoice[]
+  sites           Site[]
+  subcontractors  Subcontractor[]
+  letters         Letter[]
+  
+  createdAt       DateTime         @default(now())
+}
+
+model Site {
+  id             String          @id @default(uuid())
+  projectId      String
+  project        Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name           String          // مثلاً: بلوک ۱، بخش اداری سنندج و...
+  location       String?
+  createdAt      DateTime        @default(now())
+  dailyReports   DailyReport[]
+  subcontractors Subcontractor[] 
+}
+
+model ProjectInvoice {
+  id                  String   @id @default(uuid())
+  projectId           String
+  project             Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  invoiceType         String   // CASH_TEMPORARY, CASH_ADJUSTMENT, BARTER
+  invoiceNumber       Int      
+  periodFrom          String   
+  periodTo            String   
+  letterSendDate      String   
+  reviewDate          String?  
+  cumulativeSent      Float    
+  cumulativeApproved  Float  
+  periodPerformance   Float   
+  vatAmount           Float    
+  totalWithVat        Float    
+  retentionDeduction  Float  
+  insuranceDeduction  Float  
+  totalDeductions     Float    
+  netPayment          Float    
+  finalPaymentWithVat Float    
+  actualPaid          Float    @default(0) 
+  remainingDebt       Float    @default(0) 
+  description         String?
+  createdAt           DateTime @default(now())
+  letters             Letter[] 
+}
+
+model Subcontractor {
+  id             String   @id @default(uuid())
+  projectId      String
+  siteId         String?  // تفکیک بر اساس سایت
+  name           String   // نام پیمانکار
+  trade          String   // رسته کاری (قالب‌بندی، آرماتوربندی و...)
+  phoneNumber    String?  
+  contractNumber String   @default("نامشخص") 
+  contractDate   String?  
+  durationDays   Int      @default(0)        
+  contractAmount Float    @default(0) 
+
+  // ستون‌های قدیمی برای حفظ دیتا و عدم ارور دیتابیس
+  totalGrossSent Float    @default(0) 
+  totalApproved  Float    @default(0) 
+  totalPaid      Float    @default(0) 
+
+  // سیستم جدید تضمین حسن کار: "CHECK" یا "DEDUCTION"
+  guaranteeType  String   @default("DEDUCTION") 
+  checkDetails   String?  // مشخصات چک تضمین
+
+  status         String   @default("ACTIVE") 
+  createdAt      DateTime @default(now())
+
+  project        Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  site           Site?    @relation(fields: [siteId], references: [id], onDelete: SetNull)
+  
+  // رابطه با جدول ریز صورت‌وضعیت‌ها
+  invoices       SubcontractorInvoice[]
+
+  @@index([projectId])
+}
+
+model SubcontractorInvoice {
+  id                 String        @id @default(uuid())
+  subcontractorId    String
+  subcontractor      Subcontractor @relation(fields: [subcontractorId], references: [id], onDelete: Cascade)
+  invoiceNumber      Int           // شماره صورت وضعیت
+  grossAmount        Float         // کارکرد ناخالص این دوره (ریال)
+  retentionDeduction Float         // ۱۰٪ حسن انجام کار
+  guaranteeDeduction Float         // ۱۵٪ تضمین
+  netApproved        Float         // مبلغ خالص تایید شده کارگاه
+  centralApproved    Float         @default(0) // 🏢 مبلغ تایید شده نهایی دفتر مرکزی (جدید)
+  actualPaid         Float         @default(0) // 💳 کل مبالغ واریز شده/مساعده بابت این صورت وضعیت (جدید)
+  createdAt          DateTime      @default(now())
+}
+
+model Letter {
+  id           String          @id @default(uuid())
+  projectId    String
+  project      Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  invoiceId    String?         
+  invoice      ProjectInvoice? @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  letterNumber String          @unique 
+  title        String          
+  type         String          
+  sender       String
+  receiver     String
+  date         String          
+  archivePath  String?
+  createdAt    DateTime        @default(now())
+}
+
+model DailyReport {
+  id               String            @id @default(uuid())
+  siteId           String
+  site             Site              @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  reportDate       String            
+  weather          String?
+  physicalProgress Float
+  isLate           Boolean           @default(false)
+  fileUrl          String?           
+  createdAt        DateTime          @default(now())
+  materials        ReportMaterial[]
+}
+
+model ReportMaterial {
+  id            String      @id @default(uuid())
+  dailyReportId String
+  dailyReport   DailyReport @relation(fields: [dailyReportId], references: [id], onDelete: Cascade)
+  materialName  String
+  quantityImported Float    
+  quantityUsed  Float        
+  unit          String
+}
+
+model Task {
+  id          String    @id @default(uuid())
+  title       String
+  description String?
+  status      String    
+  priority    String    
+  dueDate     String?   
+  createdAt   DateTime  @default(now())
+}
+
+model Contact {
+  id        String   @id @default(uuid())
+  name      String
+  role      String   
+  company   String?
+  phone     String
+  createdAt DateTime @default(now())
+}
+
+model Personnel {
+  id         String   @id @default(uuid())
+  name       String
+  role       String
+  siteName   String?  
+  joinDate   String   
+  createdAt  DateTime @default(now())
+}
